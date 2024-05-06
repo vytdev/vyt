@@ -1,0 +1,30 @@
+#!/bin/sh
+
+# check args
+if [ "$#" -lt 2 ] ; then
+  echo "usage: $0 <file> <out>" >&2
+  exit 1
+fi
+
+# check for file
+if [ ! -f "$1" ] ; then
+  echo "$0: no such file $1" >&2
+  exit 1
+fi
+
+# read the file
+while IFS= read -r line ; do
+
+  # remove comments and spaces
+  line=$( echo "$line" | sed -e 's/ *#.*//' -e 's/[[:space:]]//g' )
+
+  # convert these to binary
+  while [ -n "$line" ] ; do
+    chr=$( printf '%s' "$line" | cut -c1-2 )
+    line=$( printf '%s' "$line" | cut -c3- )
+    printf "\\x$chr"
+  done
+
+done < "$1" > "$2"
+
+echo "compiled binary: $2"

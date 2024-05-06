@@ -1,0 +1,240 @@
+
+  VYT SPECIFICATION
+  version: 1
+  revised: May 6, 2024
+
+
+FORMAT
+======
+
+NOTE:
+  all numbers is in little endian
+  bits is in lsb
+
+general format:
+  header                        13 B
+  load table                    (... NUL)
+  payload                       (... EOF)
+
+vyt header:
+  magic                         4 B (00 56 59 54)
+  abi_ver                       1 B
+  entry                         8 B
+
+load table (entries):
+  type                          1 B
+  - NUL             0x0 (used to indicate end of load table)
+  - load            0x1
+  - init            0x2
+  flags                         1 B
+  - read            bit 0
+  - write           bit 1
+  - exec            bit 2
+  foffst                        8 B
+  maddr                         8 B
+  size                          8 B
+
+instruction encoding:
+  opcode                        2 B
+  modeb                         1 B
+  operand                       (var)
+
+mode byte encoding:
+  wordsz                        2 bits
+  - byte              0x0
+  - word              0x1
+  - dword             0x2
+  - qword             0x3
+  op1                           3 bits
+  op2                           3 bits
+  - none              0x0
+  - immediate         0x1
+  - register          0x2
+  - rel addr (pc)     0x3
+  - abs addr          0x4
+  - dyn addr          0x5
+
+registers:
+  reg         code          purpose
+  ---         ----          -------
+  r1          0x1           general
+  r2          0x2           general
+  r3          0x3           general
+  r4          0x4           general
+  r5          0x5           general
+  r6          0x6           general
+  r7          0x7           general
+  r8          0x8           general
+  r9          0x9           general
+  rsi         0xa           string src index
+  rdi         0xb           string dest index
+  rsp         0xc           stack top ptr
+  rbp         0xd           stack base (frame) ptr
+  rip         0xe           instruction ptr
+  rfl         0xf           flags
+
+rel/abs addr:
+  addr                          8 B
+
+dyn addr:
+  reg                           1 B
+    base                        4 b
+    ndx                         4 b
+  scale                         1 B
+  disp                          8 B
+
+
+INSTRUCTION SET
+===============
+
+  type        mode
+  ----        ----
+  i           imm
+  g           reg
+  r           rel addr
+  b           abs addr
+  y           dynamic addr
+
+  opcode      mnemonic      wsz       m1            m2
+  ------      --------      ----      --------      --------
+  0x0000      <resv>
+  0x0001      sys           w         i
+  0x0002      lod           bwdq      g             irby
+  0x0003      mov           bwdq      grby          igrby
+  0x0004      call          q         grby
+  0x0005      ret
+  0x0006      push          bwdq      igrby
+  0x0007      pop           bwdq      grby
+  0x0008      and           q         g             ig
+  0x0009      or            q         g             ig
+  0x000a      xor           q         g             ig
+  0x000b      not           q         g
+  0x000c      shl           q         g             ig
+  0x000d      shr           q         g             ig
+  0x000e      cmp           bwdq      ig            ig
+  0x000f      jmp           q         grby
+  0x0010      jeq           q         grby
+  0x0011      jne           q         grby
+  0x0012      jlt           q         grby
+  0x0013      jgt           q         grby
+  0x0014      jle           q         grby
+  0x0015      jge           q         grby
+  0x0016      jat           q         grby
+  0x0017      jbt           q         grby
+  0x0018      jae           q         grby
+  0x0019      jbe           q         grby
+  0x001a      jfo           q         grby
+  0x001b      jno           q         grby
+  0x001c      lea           q         rby
+  0x001d      sgx           bwdq      g
+  0x001e      add           bwdq      g             ig
+  0x001f      sub           bwdq      g             ig
+  0x0020      mul           bwdq      g             ig
+  0x0021      div           bwdq      g             ig
+  0x0022      mod           bwdq      g             ig
+  0x0023      imul          bwdq      g             ig
+  0x0024      idiv          bwdq      g             ig
+  0x0025      imod          bwdq      g             ig
+  0x0026      inc           q         g
+  0x0027      dec           q         g
+  0x0028      clrc
+  0x0029      setc
+  0x002a      clrz
+  0x002b      setz
+  0x002c      clrs
+  0x002d      sets
+  0x002e      clro
+  0x002f      seto
+
+
+SYSTEM CALLS
+============
+
+  r1-r7 = argument fields
+  r8    = return register
+  r9    = status code
+
+  syscall     code      return      args
+  -------     ----      -------     ----
+  <resv>      0x0000
+  exit        0x0001    void        int exitc
+  open        0x0002    int         char *path, char method
+    method:
+    -------
+    F_READ      0x1
+    F_WRITE     0x2
+    F_APPEND    0x3
+  close       0x0003    void        int fd
+  read        0x0004    long        int fd, char *buf, long size
+  write       0x0005    long        int fd, char *buf, long size
+  seek        0x0006    long        int fd, long offst, char pos
+    pos:
+    ----
+    K_SET       0x1
+    K_CURR      0x2
+    K_END       0x3
+  tell        0x0007    long        int fd
+  map         0x0008    void *      long ndx, char perm
+    perm:
+    -----
+    P_READ      0x1
+    P_WRITE     0x2
+    P_EXEC      0x4
+  unmap       0x0009    void        long ndx
+  tmake       0x000a    int         void (*func)(void), void *stack
+  tjoin       0x000b    void        int tid
+  tdaem       0x000c    void        int tid
+  tkill       0x000d    void        int tid
+  tyld        0x000e    void
+  tself       0x000f    int
+
+
+CONDITIONAL BRANCHING
+=====================
+
+test table:
+
+  a       b       flags       signed      unsigned
+  --      --      -----       ------      --------
+  00      00      ZF          (=) eq      (=) eq
+  01      00                  (>) gt      (>) gt
+  00      01      CF SF       (<) lt      (<) lt
+  80      7f      SF OF       (<) lt      (>) gt
+  7f      80      CF OF       (>) gt      (<) lt
+
+flags that are checked:
+
+  condition       signed          unsigned
+  ---------       ----------      ----------
+  ( =) eq          ZF              ZF
+  (!=) ne         !ZF             !ZF
+  ( >) gt         !SF && !ZF      !CF && !ZF
+  ( <) lt          SF              CF
+  (>=) ge         !SF             !CF
+  (<=) le          SF || ZF        CF || ZF
+
+note:
+  CF = unsigned overflow
+  OF = signed overflow
+
+conditional jump instructions
+  jeq - equal
+  jne - not equal
+  jgt -   signed   greater
+  jlt -   signed      less
+  jge -   signed   greater   or equal
+  jle -   signed      less   or equal
+  jat - unsigned   greater             (above)
+  jbt - unsigned      less             (below)
+  jae - unsigned   greater   or equal  (above)
+  jbe - unsigned      less   or equal  (below)
+  jfo -   signed   overflow
+  jno - no signed  overflow
+
+flag manipulation
+  flag      clear       set
+  ----      -----       ---
+  CF        clrc        setc
+  ZF        clrz        setz
+  SF        clrs        sets
+  OF        clro        seto
