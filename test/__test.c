@@ -39,10 +39,14 @@ int __TEST_RUN(int (*test_func)(void), const char *test_name) {
   return result ? 1 : 0;
 }
 
-int TEST_ASSERT(int cond, const char *fail_msg) {
+int TEST_ASSERT(int cond, const char *fail_msg, ...) {
   if (!cond) {
-    fprintf(stderr, "TEST: [assert] %s\n", fail_msg);
-    return 0;
+    va_list args;
+    va_start(args, fail_msg);
+    fprintf(stderr, "TEST: [assertion failed] ");
+    vfprintf(stderr, fail_msg, args);
+    fputc('\n', stderr);
+    va_end(args);
   }
-  return 1;
+  return cond;
 }
