@@ -1,2 +1,3 @@
 # ignore compiled unit tests
-mem_test
+test_mem
+test_load

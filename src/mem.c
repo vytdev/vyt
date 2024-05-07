@@ -57,6 +57,9 @@ int vmdestroy(vmem *mem) {
   mem->_used = 0;
   mem->_alloc = 0;
 
+  // destroy the rw lock
+  rw_destroy(&mem->_lock);
+
   return VOK;
 }
 

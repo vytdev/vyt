@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <string.h>
 #include "__test.h"
 #include "../src/vyt.h"
@@ -54,8 +53,44 @@ TEST(storing_data) {
   return 1;
 }
 
+// a test to verify the functionality of memory protection mechanisms
+TEST(mem_prot) {
+  int stat = VOK;
+  vmem mem;
+
+  // initialize the page table
+  stat = vminit(&mem);
+  if (!TEST_ASSERT(VOK == stat, "vminit failed")) {
+    return 0;
+  }
+
+  // map the page 0 with READ and EXEC permissions
+  stat = vmmap(&mem, 0, VPREAD | VPEXEC);
+  if (!TEST_ASSERT(VOK == stat, "vmmap failed")) {
+    vmdestroy(&mem);
+    return 0;
+  }
+
+  vbyte src[] = { 0xff, 0xfe };
+
+  // attempt to do set-data operation requiring WRITE access
+  stat = vmsetd(&mem, src, 0x1, 2, VPWRITE);
+
+  // vmsetd should return VEACCES to indicate that the requested WRITE
+  // permission is denied, as the page only allows READ and EXEC access, as
+  // specified when it was mapped
+  if (!TEST_EXPECT_EQ(stat, VEACCES)) {
+    vmdestroy(&mem);
+    return 0;
+  }
+
+  vmdestroy(&mem);
+  return 1;
+}
+
 int test(const char *suite_name) {
   TEST_RUN(storing_data);
+  TEST_RUN(mem_prot);
 
   // exit code
   return 0;

@@ -5,6 +5,8 @@
 /**
  * a writer-preferring rw lock implementation, based on:
  * https://en.m.wikipedia.org/wiki/Readers%E2%80%93writer_lock#Using_a_condition_variable_and_a_mutex
+ * 
+ * TODO: improve performance efficiency
  */
 
 typedef struct {
