@@ -6,7 +6,7 @@
 
 // a data structure for passing parameters into threads
 struct __vyt_thrdarg {
-  int tid;
+  vthrd *thr;
   vproc *proc;
 };
 
@@ -14,34 +14,36 @@ int vpinit(vproc *proc) {
   if (NULL == proc) return VERROR;
   int stat = VOK;
 
-  // setup _varlock
-  if (0 != rw_init(&proc->_varlock))
-    return VENOMEM;
-
   // try to initialize page table
   stat = vminit(&proc->mem);
-  if (VOK != stat) {
-    rw_destroy(&proc->_varlock);
+  if (VOK != stat)
     return stat;
-  }
 
   // initialize the thread list
-  proc->thrd = (vthrd*)malloc(sizeof(vthrd));
+  proc->thrd = (vthrd**)malloc(sizeof(vthrd*));
   if (NULL == proc->thrd) {
-    rw_destroy(&proc->_varlock);
     vmdestroy(&proc->mem);
     return VENOMEM;
   }
 
-  // setup the thrd list lock
-  if (0 != rw_init(&proc->_thrd_lock)) {
-    rw_destroy(&proc->_varlock);
+  // pre-allocate main thread ctx
+  proc->thrd[0] = (vthrd*)malloc(sizeof(vthrd));
+  if (NULL == proc->thrd) {
     vmdestroy(&proc->mem);
     free(proc->thrd);
     return VENOMEM;
   }
 
+  // setup the thrd list lock
+  if (0 != rw_init(&proc->_thrd_lock)) {
+    vmdestroy(&proc->mem);
+    free(proc->thrd);
+    free(proc->thrd[0]);
+    return VENOMEM;
+  }
+
   // set some variables
+  atomic_store(&proc->nexec, 0);
   atomic_store(&proc->alive, 0);
   atomic_store(&proc->active, 0);
   proc->_thrd_used = 0;
@@ -58,18 +60,17 @@ int vpdestroy(vproc *proc) {
   int state = atomic_load(&proc->state);
   if (VSDONE != state && VSCRASH != state) return VERROR;
 
-  // destroy _varlock
-  rw_destroy(&proc->_varlock);
-
   // destroy the page table
   vmdestroy(&proc->mem);
 
   // de-allocate the thread list
   if (NULL != proc->thrd) {
+    if (NULL != proc->thrd[0]) free(proc->thrd[0]);
     free(proc->thrd);
     proc->thrd = NULL;
   }
   // set some variables
+  atomic_store(&proc->nexec, 0);
   atomic_store(&proc->alive, 0);
   atomic_store(&proc->active, 0);
   proc->_thrd_used = 0;
@@ -102,7 +103,7 @@ int vload(vproc *proc, vbyte *stream, vqword sz) {
   d++;
 
   // extract the entry address
-  proc->thrd[0].reg[RIP] = v__urq(d);
+  proc->thrd[0]->reg[RIP] = v__urq(d);
   d += 8;
 
   // parse and process the load table
@@ -159,79 +160,76 @@ int vstart(vproc *proc, int *tid, vqword instptr, vqword staddr) {
   // allocate 'arg', passed to the new thread
   struct __vyt_thrdarg *arg = (struct __vyt_thrdarg*)malloc(
     sizeof(struct __vyt_thrdarg));
-  if (NULL == arg) return VENOMEM;
+  if (NULL == arg)
+    return VENOMEM;
   arg->proc = proc;
+
+  // allocate thread ctx structure
+  vthrd *thr = (vthrd*)malloc(sizeof(vthrd));
+  if (NULL == thr) {
+    free(arg);
+    return VENOMEM;
+  }
+
+  // initialize the thread ctx
+  thr->flags = VTALIVE;
+  memset(&thr->reg[0], 0, sizeof(vqword) * 16);
+  thr->reg[RIP] = instptr;
+  thr->reg[RSP] = staddr;
+  thr->reg[RBP] = staddr;
+  arg->thr = thr;
 
   // acquire the thread list lock
   rw_wlock(&proc->_thrd_lock);
-
-  // ptr into a thread list slot
-  vthrd *avail = NULL;
 
   // check if there's still some free slots in the thread list
   // +1 for the main thread (slot 0 is reserved for main)
   if (proc->_thrd_alloc > proc->_thrd_used + 1) {
     for (vqword i = 1; i < proc->_thrd_alloc; i++) {
-      if (!(proc->thrd[i].flags & VTUSED)) {
+      if (NULL == proc->thrd[i]) {
+
         // this slot is unused! let's use it
-
-        // the thread might still be running in system
-        rw_wunlock(&proc->_thrd_lock);
-        thrd_join(proc->thrd[i].handle, NULL);
-        rw_wlock(&proc->_thrd_lock);
-
-        avail = &proc->thrd[i];
-        arg->tid = i;
+        proc->thrd[i] = thr;
+        thr->tid = i;
         if (NULL != tid) *tid = i;
         break;
+
       }
     }
   }
 
   // the thread list is full, try re-allocate
   else {
-    vthrd *tmp = (vthrd*)realloc(proc->thrd,
-                                 sizeof(vthrd) * proc->_thrd_alloc * 2);
+    vthrd **tmp = (vthrd**)realloc(proc->thrd,
+                                   sizeof(vthrd*) * proc->_thrd_alloc * 2);
 
     // failed to re-allocate the thread list
     if (NULL == tmp) {
       free(arg);
+      free(thr);
       rw_wunlock(&proc->_thrd_lock);
       return VENOMEM;
     }
 
     // initialize new structures
-    for (vqword i = 0; i < proc->_thrd_alloc; i++) {
-      tmp[proc->_thrd_alloc + i].flags = 0;
-      // initialize the 16 registers to 0
-      memset(tmp[proc->_thrd_alloc + i].reg, 0, sizeof(vqword) * 16);
-    }
+    for (vqword i = 0; i < proc->_thrd_alloc; i++)
+      tmp[proc->_thrd_alloc + i] = NULL;
 
     // the end of the last allocation is now available! use it
-    avail = &tmp[proc->_thrd_alloc];
-    arg->tid = proc->_thrd_alloc;
+    tmp[proc->_thrd_alloc] = thr;
+    thr->tid = proc->_thrd_alloc;
     if (NULL != tid) *tid = proc->_thrd_alloc;
 
     proc->_thrd_alloc *= 2;
     proc->thrd = tmp;
   }
 
-  // set some variables on the thread
-  avail->flags = VTUSED | VTALIVE;
-  avail->reg[RIP] = instptr;
-  avail->reg[RSP] = staddr;
-  avail->reg[RBP] = staddr;
-  proc->_thrd_used++;
-
   // try start new thread
-  if (thrd_create(&avail->handle, v__execunit, arg) != 0) {
+  if (thrd_create(&thr->handle, v__execunit, arg) != 0) {
     // failed to start new thread, do cleanup and return
+    proc->thrd[thr->tid] = NULL;
     free(arg);
-    avail->flags = 0;
-    avail->reg[RIP] = 0;
-    avail->reg[RSP] = 0;
-    avail->reg[RBP] = 0;
-    proc->_thrd_used--;
+    free(thr);
 
     rw_wunlock(&proc->_thrd_lock);
 
@@ -240,6 +238,9 @@ int vstart(vproc *proc, int *tid, vqword instptr, vqword staddr) {
     return VETHRD;
   }
 
+  // increment the number of thread allocated on the list
+  proc->_thrd_used++;
+
   rw_wunlock(&proc->_thrd_lock);
   atomic_store(&proc->state, VSACTIVE);
 
@@ -247,26 +248,18 @@ int vstart(vproc *proc, int *tid, vqword instptr, vqword staddr) {
 }
 
 int v__execunit(void *arg) {
-  // get the tid first
-  int tid     = ((struct __vyt_thrdarg*)arg)->tid;
+  // get the thread info
+  vthrd* thr  = ((struct __vyt_thrdarg*)arg)->thr;
   vproc *proc = ((struct __vyt_thrdarg*)arg)->proc;
   free(arg);
 
   // increment number of alive threads
   atomic_fetch_add(&proc->alive, 1);
 
-  // this is the execution loop, it relies on
   while (1) {
-    rw_rlock(&proc->_thrd_lock);
-
     // check if the runtime is still active, and this thread is still alive
-    if (
-      atomic_load(&proc->state) != VSACTIVE ||
-      !(proc->thrd[tid].flags & VTALIVE)
-    ) {
-      rw_runlock(&proc->_thrd_lock);
+    if (atomic_load(&proc->state) != VSACTIVE || !(thr->flags & VTALIVE))
       break;
-    }
 
     // increment active threads count
     atomic_fetch_add(&proc->active, 1);
@@ -275,7 +268,7 @@ int v__execunit(void *arg) {
 
     // decrement active threads count
     atomic_fetch_sub(&proc->active, 1);
-    rw_runlock(&proc->_thrd_lock);
+    atomic_fetch_add(&proc->nexec, 1);
 
 break; // tmp code
 
@@ -283,11 +276,13 @@ break; // tmp code
 
   // do some clean-ups
   rw_wlock(&proc->_thrd_lock);
-  proc->thrd[tid].flags = 0;
-  memset(&proc->thrd[tid].reg, 0, sizeof(vqword) * 16);
+  proc->thrd[thr->tid] = NULL;
   proc->_thrd_used--;
   if (0 == proc->_thrd_used) atomic_store(&proc->state, VSDONE);
   rw_wunlock(&proc->_thrd_lock);
+
+  // free thread ctx
+  free(thr);
 
   // decrement number of alive threads
   atomic_fetch_sub(&proc->alive, 1);

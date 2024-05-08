@@ -7,18 +7,19 @@
 #include "locks.h"
 
 typedef struct {
+  vdword            tid;
   thrd_t            handle;
   vbyte             flags;
   vqword            reg[16];
 } vthrd;
 
 typedef struct {
+  _Atomic vqword    nexec;
   _Atomic int       state;
-  rw_t              _varlock;
 
   vmem              mem;
 
-  vthrd             *thrd;
+  vthrd             **thrd;
   _Atomic vdword    alive;
   _Atomic vdword    active;
   vdword            _thrd_used;
@@ -35,8 +36,7 @@ typedef struct {
 #define VSCRASH     5
 
 /* thread flags */
-#define VTUSED      0x1   /* slot is currently allocated */
-#define VTALIVE     0x2   /* the thread included is alive */
+#define VTALIVE     0x1   /* the thread is alive */
 
 /* load type */
 #define VLLOAD      0x1   /* load from payload */
