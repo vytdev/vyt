@@ -1,8 +1,11 @@
 #include <stdlib.h>
 #include <stdatomic.h>
+#include <stdio.h>
 #include "exec.h"
 #include "locks.h"
 #include "utils.h"
+// include instructions
+#include "inst/sys.h"
 
 // a data structure for passing parameters into threads
 struct __vyt_thrdarg {
@@ -44,6 +47,8 @@ int vpinit(vproc *proc) {
 
   // set some variables
   atomic_store(&proc->nexec, 0);
+  atomic_store(&proc->crash_tid, 0);
+  atomic_store(&proc->crash_stat, 0);
   atomic_store(&proc->alive, 0);
   atomic_store(&proc->active, 0);
   proc->_thrd_used = 0;
@@ -71,6 +76,8 @@ int vpdestroy(vproc *proc) {
   }
   // set some variables
   atomic_store(&proc->nexec, 0);
+  atomic_store(&proc->crash_tid, 0);
+  atomic_store(&proc->crash_stat, 0);
   atomic_store(&proc->alive, 0);
   atomic_store(&proc->active, 0);
   proc->_thrd_used = 0;
@@ -247,6 +254,60 @@ int vstart(vproc *proc, int *tid, vqword instptr, vqword staddr) {
   return VOK;
 }
 
+int vrun(vproc *proc) {
+  if (NULL == proc) return VERROR;
+
+  // the vm should be already loaded
+  if (atomic_load(&proc->state) != VSLOAD) return VERROR;
+
+  // setup 'arg', passed to main's execution unit
+  struct __vyt_thrdarg *arg = (struct __vyt_thrdarg*)malloc(
+    sizeof(struct __vyt_thrdarg));
+  if (NULL == arg)
+    return VENOMEM;
+  arg->thr = proc->thrd[0];
+  arg->proc = proc;
+  proc->thrd[0]->flags = VTALIVE;
+
+  // increment number of active threads and set the vm state to active
+  proc->_thrd_used++;
+  atomic_store(&proc->state, VSACTIVE);
+
+  // run main
+  v__execunit(arg);
+  arg = NULL;
+
+  // main is done, wait for other threads to finish
+  while (atomic_load(&proc->state) == VSACTIVE)
+    thrd_yield();
+
+  // handle any crashes
+  v__handle_crash(proc);
+
+  return atomic_load(&proc->crash_stat);
+}
+
+int v__handle_crash(vproc *proc) {
+  if (NULL == proc) return VERROR;
+
+  // the vm is not crashed
+  if (atomic_load(&proc->state) != VSCRASH) return VOK;
+
+  // get the crashed thread
+  vdword tid = atomic_load(&proc->crash_tid);
+  vthrd *thr = proc->thrd[tid];
+
+  // print some useful crash details
+  fprintf(stderr, "unhandled critical exception\n");
+  fprintf(stderr, "tid:       %d\n", tid);
+  fprintf(stderr, "mem:       %llu pages\n", proc->mem._used);
+
+  // free the crashed thread ctx
+  free(thr);
+  proc->thrd[tid] = NULL;
+  return VOK;
+}
+
 int v__execunit(void *arg) {
   // get the thread info
   vthrd* thr  = ((struct __vyt_thrdarg*)arg)->thr;
@@ -255,23 +316,70 @@ int v__execunit(void *arg) {
 
   // increment number of alive threads
   atomic_fetch_add(&proc->alive, 1);
+  int stat = VOK;
+  vbyte buf[23];
 
   while (1) {
-    // check if the runtime is still active, and this thread is still alive
-    if (atomic_load(&proc->state) != VSACTIVE || !(thr->flags & VTALIVE))
-      break;
-
+    // check if there's no error in last execution, the runtime is still active,
+    // and this thread is still alive
+    if (
+      VOK != stat ||
+      atomic_load(&proc->state) != VSACTIVE ||
+      !(thr->flags & VTALIVE)
+    ) break;
     // increment active threads count
     atomic_fetch_add(&proc->active, 1);
 
-    // TODO: decode and execute instructions here
+    // decode the instruction here
+    stat = vmgetd(&proc->mem, buf, thr->reg[RIP], 3, VPREAD | VPEXEC);
+    if (VOK != stat) {
+      atomic_fetch_sub(&proc->active, 1);
+      break;
+    }
+    // get the opcode
+    vword opcode = v__urw(buf);
+    // get the modeb, +2 for the opcode
+    vbyte modeb = v__urb(buf + 2);
+    vbyte wsz   = modeb & 2;
+    vbyte mop1  = (modeb >> 2) & 3;
+    vbyte mop2  = (modeb >> 2) & 3;
+    // get the operands
+    vbyte op1sz = v__opsz(mop1, wsz);
+    vbyte op2sz = v__opsz(mop2, wsz);
+    stat = vmgetd(&proc->mem,
+                  buf + 3,
+                  thr->reg[RIP] + 3,
+                  op1sz + op2sz,
+                  VPREAD | VPEXEC);
+    if (VOK != stat) {
+      atomic_fetch_sub(&proc->active, 1);
+      break;
+    }
+    vbyte *op1 = buf + 3;
+    vbyte *op2 = buf + 3 + op1sz;
+    // update the program counter
+    // - 3     - opcode and wordsize
+    // - op1sz - size of the first opcode
+    // - op2sz - size of the second opcode
+    thr->reg[RIP] += 3 + op1sz + op2sz;
+
+    // switch though opcodes
+    switch (opcode) {
+      case 0x1: stat = VINST_sys(proc, thr, wsz, mop1, op1sz, op1, mop2, op2sz, op2); break;
+      default: stat = VEINST;
+    }
 
     // decrement active threads count
     atomic_fetch_sub(&proc->active, 1);
     atomic_fetch_add(&proc->nexec, 1);
+  }
 
-break; // tmp code
-
+  // error occured, crash the vm!
+  if (VOK != stat) {
+    atomic_store(&proc->state, VSCRASH);
+    atomic_store(&proc->crash_tid, thr->tid);
+    atomic_store(&proc->crash_stat, stat);
+    return stat;
   }
 
   // do some clean-ups

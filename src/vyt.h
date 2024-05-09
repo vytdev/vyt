@@ -21,6 +21,7 @@ typedef uint64_t vqword;
 #define VEREV       (-12)
 #define VEMALF      (-13)
 #define VETHRD      (-30)
+#define VEINST      (-31)
 
 /**
  * print error by return code

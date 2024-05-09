@@ -16,6 +16,8 @@ typedef struct {
 typedef struct {
   _Atomic vqword    nexec;
   _Atomic int       state;
+  _Atomic vdword    crash_tid;
+  _Atomic int       crash_stat;
 
   vmem              mem;
 
@@ -59,6 +61,20 @@ typedef struct {
 #define RIP         0xe
 #define RFL         0xf
 
+/* operand wordsize */
+#define WBYTE       0x0
+#define WWORD       0x1
+#define WDWORD      0x2
+#define WQWORD      0x3
+
+/* opcode argument modes */
+#define DNONE       0x0
+#define DIMMED      0x1
+#define DREG        0x2
+#define DRELADDR    0x3
+#define DABSADDR    0x4
+#define DDYNADDR    0x5
+
 /**
  * initialize the given process context
  */
@@ -79,6 +95,42 @@ int vload(vproc *proc, vbyte *stream, vqword sz);
  */
 int vstart(vproc *proc, int *tid, vqword instptr, vqword staddr);
 
+/**
+ * start the main thread and the whole virtual machine process
+ */
+int vrun(vproc *proc);
+
+/**
+ * handle vm crash
+ */
+int v__handle_crash(vproc *proc);
+
+/**
+ * internal: thread execution unit
+ */
 int v__execunit(void *arg);
+
+/* returns the data size in bytes from given wordsize */
+static inline int v__wsz(vbyte wsz) {
+  switch (wsz) {
+    case WBYTE:   return 1;
+    case WWORD:   return 2;
+    case WDWORD:  return 4;
+    case WQWORD:  return 8;
+    default:      return 0;
+  }
+}
+
+/* returns the size of an operand in the instruction */
+static inline int v__opsz(vbyte opmode, vbyte wsz) {
+  switch (opmode) {
+    case DNONE:                     return 0;
+    case DIMMED:                    return v__wsz(wsz);
+    case DREG:                      return 1;
+    case DRELADDR: case DABSADDR:   return 8;
+    case DDYNADDR:                  return 10;
+    default:                        return 0;
+  }
+}
 
 #endif // _VYT_EXEC_H

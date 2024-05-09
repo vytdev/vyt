@@ -17,6 +17,7 @@ int vperr(int ret) {
     case VEREV:   msg = "version mismatch"; break;
     case VEMALF:  msg = "malformed format"; break;
     case VETHRD:  msg = "cannot create new thread"; break;
+    case VEINST:  msg = "illegal instruction"; break;
     default:
       // unknown error code
       fprintf(stderr, "error %d\n", ret);
