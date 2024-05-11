@@ -1,6 +1,40 @@
 #ifndef _VYT_LOCKS_H
 #define _VYT_LOCKS_H
 #include <threads.h>
+#include <stdatomic.h>
+
+/**
+ * a fast-mutex, avoids context switching and blocking overhead
+ * 
+ * NOTE:
+ * - it may not be as cpu efficient as the traditional mutex
+ * - only use for performance critical and short operations
+ * - bad in high contention
+ */
+typedef _Atomic char fmtx_t;
+
+/**
+ * initialize fmtx lock (same as fmtx_unlock)
+ */
+static inline void fmtx_init(fmtx_t *mtx) {
+  atomic_store(mtx, 0);
+}
+
+/**
+ * acquire fmtx lock
+ */
+static inline void fmtx_lock(fmtx_t *mtx) {
+  while (atomic_load(mtx) != 0)
+    thrd_yield();
+  atomic_store(mtx, 1);
+}
+
+/**
+ * release fmtx lock (same as fmtx_init)
+ */
+static inline void fmtx_unlock(fmtx_t *mtx) {
+  atomic_store(mtx, 0);
+}
 
 /**
  * a writer-preferring rw lock implementation, based on:

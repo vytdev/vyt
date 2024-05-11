@@ -3,6 +3,8 @@
 #include "../src/vyt.h"
 #include "../src/mem.h"
 
+#include <time.h>
+
 // a simple test to validate whether our memory paging implementation works
 // perfectly fine
 TEST(storing_data) {
@@ -10,7 +12,7 @@ TEST(storing_data) {
   vmem mem;
 
   // initialize the page table
-  stat = vminit(&mem);
+  stat = vminit(&mem, 0);
   if (!TEST_ASSERT(VOK == stat, "vminit failed")) {
     return 0;
   }
@@ -59,7 +61,7 @@ TEST(mem_prot) {
   vmem mem;
 
   // initialize the page table
-  stat = vminit(&mem);
+  stat = vminit(&mem, 0);
   if (!TEST_ASSERT(VOK == stat, "vminit failed")) {
     return 0;
   }
@@ -88,9 +90,45 @@ TEST(mem_prot) {
   return 1;
 }
 
+// a performance test for lru caching
+TEST(perf_test) {
+  int stat = VOK;
+  vmem mem;
+
+  // initialize the page table
+  stat = vminit(&mem, 24);
+  if (!TEST_ASSERT(VOK == stat, "vminit failed")) {
+    return 0;
+  }
+
+  // map the page 0 with READ and EXEC permissions
+  stat = vmmap(&mem, 0, VPREAD | VPEXEC);
+  if (!TEST_ASSERT(VOK == stat, "vmmap failed")) {
+    vmdestroy(&mem);
+    return 0;
+  }
+
+  int count = 1000000;
+  struct timespec start, end;
+  vmpage *out = NULL;
+  clock_gettime(CLOCK_MONOTONIC, &start);
+
+  for (int i = 0; i < count; i++) vmgetp(&mem, 0, &out);
+
+  clock_gettime(CLOCK_MONOTONIC, &end);
+  uint64_t elapsed = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
+  printf("elapsed:  %llu\n", elapsed);
+  printf("count:    %u\n", count);
+  printf("speed:    %llu\n", elapsed / count);
+
+  vmdestroy(&mem);
+  return 1;
+}
+
 int test(const char *suite_name) {
   TEST_RUN(storing_data);
   TEST_RUN(mem_prot);
+  TEST_RUN(perf_test);
 
   // exit code
   return 0;

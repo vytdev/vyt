@@ -16,6 +16,7 @@ typedef struct {
 typedef struct {
   _Atomic vqword    nexec;
   _Atomic int       state;
+  _Atomic int       exitcode;
   _Atomic vdword    crash_tid;
   _Atomic int       crash_stat;
 

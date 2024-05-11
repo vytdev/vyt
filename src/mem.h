@@ -1,5 +1,6 @@
 #ifndef _VYT_MEM_H
 #define _VYT_MEM_H
+#include <stddef.h>
 #include "vyt.h"
 #include "locks.h"
 
@@ -9,11 +10,26 @@ typedef struct {
   vbyte             *frame;
 } vmpage;
 
+typedef struct _cache_entry_s {
+  int               ndx;
+  uintptr_t         offst; /* vmem->page + ent->offst */
+  struct _cache_entry_s *prev;
+  struct _cache_entry_s *next;
+} _vmem_cache;
+
 typedef struct {
   vmpage            *page;
   vqword            _used;
   vqword            _alloc;
   rw_t              _lock;
+
+  /* used in caching */
+  _vmem_cache       *cache_pool;
+  vword             _cache_size;
+  vword             _cache_used;
+  _vmem_cache       *_cache_head;
+  _vmem_cache       *_cache_tail;
+  fmtx_t            _cache_lock;
 } vmem;
 
 /* some constants */
@@ -27,9 +43,10 @@ typedef struct {
 #define VPOWNED     (1<<3)
 
 /**
- * initialize memory page table
+ * initialize memory page table and the cache by 'cachesz' entries. set
+ * 'cachesz' to 0 to disable caching
  */
-int vminit(vmem *mem);
+int vminit(vmem *mem, vword cachesz);
 
 /**
  * destroy memory page table

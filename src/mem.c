@@ -3,8 +3,9 @@
 
 // NOTE:
 // - when ndx is -1, that page slot is available for reuse
+// - we use lru caching!
 
-int vminit(vmem *mem) {
+int vminit(vmem *mem, vword cachesz) {
   if (NULL == mem) return VERROR;
 
   // try to allocate page table
@@ -21,9 +22,32 @@ int vminit(vmem *mem) {
     return VENOMEM;
   }
 
+  // setup cache
+  mem->cache_pool = (_vmem_cache*)malloc(sizeof(_vmem_cache) * cachesz);
+  if (NULL == mem->cache_pool) {
+    free(mem->page);
+    mem->page = NULL;
+    rw_destroy(&mem->_lock);
+    return VENOMEM;
+  }
+
+  // initialize the cache
+  for (int i = 0; i < cachesz; i++) {
+    mem->cache_pool[i].ndx = -1;
+    mem->cache_pool[i].offst = 0;
+    mem->cache_pool[i].prev = NULL;
+    mem->cache_pool[i].next = NULL;
+  }
+  fmtx_init(&mem->_cache_lock);
+
   // set variables
   mem->_used = 0;
   mem->_alloc = 1;
+
+  mem->_cache_size = cachesz;
+  mem->_cache_used = 0;
+  mem->_cache_head = &mem->cache_pool[0];
+  mem->_cache_tail = &mem->cache_pool[0];
 
   return VOK;
 }
@@ -52,6 +76,15 @@ int vmdestroy(vmem *mem) {
     free(mem->page);
     mem->page = NULL;
   }
+
+  // free the cache
+  if (NULL != mem->cache_pool)
+    free(mem->cache_pool);
+  mem->cache_pool = NULL;
+  mem->_cache_size = 0;
+  mem->_cache_used = 0;
+  mem->_cache_head = NULL;
+  mem->_cache_tail = NULL;
 
   // set these to zero
   mem->_used = 0;
@@ -140,7 +173,7 @@ int vmunmap(vmem *mem, vqword ndx) {
   for (vqword i = 0; i < mem->_alloc; i++) {
     if (ndx == mem->page[i].ndx) {
 
-      // the frame of this page is not NULL and this page owns that frame,
+      // if the frame of this page is not NULL and this page owns that frame,
       // de-allocate the frame
       if ((mem->page[i].flags & VPOWNED) && NULL != mem->page[i].frame)
         free(mem->page[i].frame);
@@ -156,29 +189,111 @@ int vmunmap(vmem *mem, vqword ndx) {
   }
 
   rw_wunlock(&mem->_lock);
+
+  // remove the page from cache, if it is currently cached
+  fmtx_lock(&mem->_cache_lock);
+  _vmem_cache *ent = mem->_cache_head;
+  for (int i = 0; i < mem->_cache_used; i++) {
+    if (ent->ndx == ndx) {
+      if (NULL != ent->prev) ent->prev->next = ent->next;
+      else mem->_cache_head = ent->next;
+      if (NULL != ent->next) ent->next->prev = ent->prev;
+      else mem->_cache_tail = ent->prev;
+      ent->ndx = -1;
+      ent->offst = 0;
+      ent->prev = NULL;
+      ent->next = NULL;
+      break;
+    }
+    if (ent->next == NULL) break;
+    ent = ent->next;
+  }
+  fmtx_unlock(&mem->_cache_lock);
+
   return VOK;
 }
 
 int vmgetp(vmem *mem, vqword ndx, vmpage **out) {
-  if (NULL == mem || NULL == mem->page) return VERROR;
+  if (NULL == mem || NULL == mem->page || NULL == out) return VERROR;
 
   // invalid page index
   if (VPAGEMX < ndx) return VESEGV;
 
+  _vmem_cache *ent = NULL;
+
+  // check the cache first
+  fmtx_lock(&mem->_cache_lock);
+  ent = mem->_cache_head;
+  for (int i = 0; i < mem->_cache_used; i++) {
+    if (ent->ndx == ndx) {
+      *out = mem->page + ent->offst;
+      if (NULL != ent->prev) ent->prev->next = ent->next;
+      if (NULL != ent->next) ent->next->prev = ent->prev;
+      mem->_cache_head->prev = ent;
+      ent->next = mem->_cache_head;
+      ent->prev = NULL;
+      mem->_cache_head = ent;
+      fmtx_unlock(&mem->_cache_lock);
+      // cache hit
+      return VOK;
+    }
+    // cache miss
+    if (ent->next == NULL) break;
+    ent = ent->next;
+  }
+  fmtx_unlock(&mem->_cache_lock);
+
+  // acquire rlock
   rw_rlock(&mem->_lock);
 
-  // find the page and return it
+  // page table lookup, find the page and return it
   for (vqword i = 0; i < mem->_alloc; i++) {
     if (ndx == mem->page[i].ndx) {
       *out = &mem->page[i];
       rw_runlock(&mem->_lock);
-      return VOK;
+      // page table hit, update the cache
+
+      fmtx_lock(&mem->_cache_lock);
+
+      // cache is full, evict the lru
+      if (mem->_cache_size <= mem->_cache_used) {
+        if (NULL != mem->_cache_tail->prev)
+          mem->_cache_tail->prev->next = NULL;
+        ent = mem->_cache_tail;
+        if (NULL != mem->_cache_tail->prev)
+          mem->_cache_tail = mem->_cache_tail->prev;
+        mem->_cache_head->prev = ent;
+        ent->prev = NULL;
+        ent->next = mem->_cache_head;
+        mem->_cache_head = ent;
+        ent->ndx = ndx;
+        ent->offst = &mem->page[i] - mem->page;
+        fmtx_unlock(&mem->_cache_lock);
+        return VOK;
+      }
+
+      // find a free entry in the pool
+      for (int i = 0; i < mem->_cache_size; i++) {
+        if (mem->cache_pool[i].ndx == -1) {
+          ent = &mem->cache_pool[i];
+          mem->_cache_head->prev = ent;
+          ent->prev = NULL;
+          ent->next = mem->_cache_head;
+          mem->_cache_head = ent;
+          ent->ndx = ndx;
+          ent->offst = &mem->page[i] - mem->page;
+          mem->_cache_used++;
+          fmtx_unlock(&mem->_cache_lock);
+          return VOK;
+        }
+      }
+
     }
   }
 
   rw_runlock(&mem->_lock);
 
-  // the page does not exist, raise segmentation fault
+  // page table miss, the page does not exist, raise segmentation fault
   return VESEGV;
 }
 

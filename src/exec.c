@@ -13,12 +13,14 @@ struct __vyt_thrdarg {
   vproc *proc;
 };
 
+// TODO: make this more customizable
+
 int vpinit(vproc *proc) {
   if (NULL == proc) return VERROR;
   int stat = VOK;
 
   // try to initialize page table
-  stat = vminit(&proc->mem);
+  stat = vminit(&proc->mem, 24);
   if (VOK != stat)
     return stat;
 
@@ -47,6 +49,7 @@ int vpinit(vproc *proc) {
 
   // set some variables
   atomic_store(&proc->nexec, 0);
+  atomic_store(&proc->exitcode, 0);
   atomic_store(&proc->crash_tid, 0);
   atomic_store(&proc->crash_stat, 0);
   atomic_store(&proc->alive, 0);
@@ -76,6 +79,7 @@ int vpdestroy(vproc *proc) {
   }
   // set some variables
   atomic_store(&proc->nexec, 0);
+  atomic_store(&proc->exitcode, 0);
   atomic_store(&proc->crash_tid, 0);
   atomic_store(&proc->crash_stat, 0);
   atomic_store(&proc->alive, 0);
@@ -269,6 +273,8 @@ int vrun(vproc *proc) {
   arg->proc = proc;
   proc->thrd[0]->flags = VTALIVE;
 
+  // TODO: setup main's stack and args
+
   // increment number of active threads and set the vm state to active
   proc->_thrd_used++;
   atomic_store(&proc->state, VSACTIVE);
@@ -296,11 +302,33 @@ int v__handle_crash(vproc *proc) {
   // get the crashed thread
   vdword tid = atomic_load(&proc->crash_tid);
   vthrd *thr = proc->thrd[tid];
+  int stat = atomic_load(&proc->crash_stat);
 
   // print some useful crash details
   fprintf(stderr, "unhandled critical exception\n");
+  // ... cli args, program name, program args
+  fprintf(stderr, "abi:       %u\n", VVERSION);
   fprintf(stderr, "tid:       %d\n", tid);
   fprintf(stderr, "mem:       %llu pages\n", proc->mem._used);
+  fprintf(stderr, "code:      %d\n", stat);
+  fprintf(stderr, "cause:     ");
+  vperr(stat);
+  fprintf(stderr, "\n");
+  fprintf(stderr, "     r1  %016llx %lld\n", thr->reg[R1],  thr->reg[R1]);
+  fprintf(stderr, "     r2  %016llx %lld\n", thr->reg[R2],  thr->reg[R2]);
+  fprintf(stderr, "     r3  %016llx %lld\n", thr->reg[R3],  thr->reg[R3]);
+  fprintf(stderr, "     r4  %016llx %lld\n", thr->reg[R4],  thr->reg[R4]);
+  fprintf(stderr, "     r5  %016llx %lld\n", thr->reg[R5],  thr->reg[R5]);
+  fprintf(stderr, "     r6  %016llx %lld\n", thr->reg[R6],  thr->reg[R6]);
+  fprintf(stderr, "     r7  %016llx %lld\n", thr->reg[R7],  thr->reg[R7]);
+  fprintf(stderr, "     r8  %016llx %lld\n", thr->reg[R8],  thr->reg[R8]);
+  fprintf(stderr, "     r9  %016llx %lld\n", thr->reg[R9],  thr->reg[R9]);
+  fprintf(stderr, "     rsi %016llx %lld\n", thr->reg[RSI], thr->reg[RSI]);
+  fprintf(stderr, "     rdi %016llx %lld\n", thr->reg[RDI], thr->reg[RDI]);
+  fprintf(stderr, "     rsp %016llx %lld\n", thr->reg[RSP], thr->reg[RSP]);
+  fprintf(stderr, "     rbp %016llx %lld\n", thr->reg[RBP], thr->reg[RBP]);
+  fprintf(stderr, "     rip %016llx %lld\n", thr->reg[RIP], thr->reg[RIP]);
+  fprintf(stderr, "     rfl %016llx %lld\n", thr->reg[RFL], thr->reg[RFL]);
 
   // free the crashed thread ctx
   free(thr);
@@ -340,9 +368,9 @@ int v__execunit(void *arg) {
     vword opcode = v__urw(buf);
     // get the modeb, +2 for the opcode
     vbyte modeb = v__urb(buf + 2);
-    vbyte wsz   = modeb & 2;
-    vbyte mop1  = (modeb >> 2) & 3;
-    vbyte mop2  = (modeb >> 2) & 3;
+    vbyte wsz   = modeb & 3;
+    vbyte mop1  = (modeb >> 2) & 7;
+    vbyte mop2  = (modeb >> 5) & 7;
     // get the operands
     vbyte op1sz = v__opsz(mop1, wsz);
     vbyte op2sz = v__opsz(mop2, wsz);

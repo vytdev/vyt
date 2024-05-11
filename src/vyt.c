@@ -18,6 +18,7 @@ int vperr(int ret) {
     case VEMALF:  msg = "malformed format"; break;
     case VETHRD:  msg = "cannot create new thread"; break;
     case VEINST:  msg = "illegal instruction"; break;
+    case VESYCL:  msg = "unknown system call"; break;
     default:
       // unknown error code
       fprintf(stderr, "error %d\n", ret);
