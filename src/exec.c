@@ -7,6 +7,7 @@
 // include instructions
 #include "inst/sys.h"
 #include "inst/lod.h"
+#include "inst/mov.h"
 
 // a data structure for passing parameters into threads
 struct __vyt_thrdarg {
@@ -396,6 +397,7 @@ int v__execunit(void *arg) {
     switch (opcode) {
       case 0x0001: stat = VINST_sys(proc, thr, wsz, mop1, op1sz, op1, mop2, op2sz, op2); break;
       case 0x0002: stat = VINST_lod(proc, thr, wsz, mop1, op1sz, op1, mop2, op2sz, op2); break;
+      case 0x0003: stat = VINST_mov(proc, thr, wsz, mop1, op1sz, op1, mop2, op2sz, op2); break;
       default: stat = VEINST;
     }
 

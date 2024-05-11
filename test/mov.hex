@@ -1,0 +1,20 @@
+# mov instruction
+
+00 56 59 54                         # magic number
+01                                  # abi version
+01 00 00 00 00 00 00 00             # entry point
+
+# load table
+
+01                                  # load type, from payload
+05                                  # READ and EXEC permission
+28 00 00 00 00 00 00 00             # file offset
+01 00 00 00 00 00 00 00             # memory address
+0a 00 00 00 00 00 00 00             # size
+
+00                                  # end of load table
+
+# 0x28: mov %r1, 1
+03 00 28 01 01
+# 0x2d: sys 0x1
+01 00 05 01 00
