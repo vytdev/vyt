@@ -5,6 +5,7 @@
 #include "vyt.h"
 #include "mem.h"
 #include "locks.h"
+#include "utils.h"
 
 typedef struct {
   vdword            tid;
@@ -131,6 +132,23 @@ static inline int v__opsz(vbyte opmode, vbyte wsz) {
     case DRELADDR: case DABSADDR:   return 8;
     case DDYNADDR:                  return 10;
     default:                        return 0;
+  }
+}
+
+/* resolve memory address */
+static inline vqword v__maddr(vbyte opmode, vbyte *op, vthrd *thr) {
+  switch (opmode) {
+    case DRELADDR:
+      return thr->reg[RIP] + v__urq(op);
+    case DABSADDR:
+      return v__urq(op);
+    case DDYNADDR:
+      return thr->reg[op[0] & 4] +  // base
+             op[1] *                // scale
+             thr->reg[op[0] >> 4] + // index
+             v__urq(op + 2);        // displacement
+    default:
+      return 0;
   }
 }
 

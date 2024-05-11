@@ -1,4 +1,4 @@
-# sample program
+# exit with code -1
 
 00 56 59 54                         # magic number
 01                                  # abi version
@@ -10,9 +10,11 @@
 05                                  # READ and EXEC permission
 28 00 00 00 00 00 00 00             # file offset
 01 00 00 00 00 00 00 00             # memory address
-05 00 00 00 00 00 00 00             # size
+0a 00 00 00 00 00 00 00             # size
 
 00                                  # end of load table
 
-# 0x28: sys 0x1
+# 0x28: lod %r1, 255
+02 00 28 01 ff
+# 0x2d: sys 0x1
 01 00 05 01 00

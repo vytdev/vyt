@@ -6,7 +6,6 @@
 #include "../utils.h"
 
 static inline int VINST_sys(vproc *proc, vthrd *thr, vbyte wsz, vbyte mop1, vbyte op1sz, vbyte *op1, vbyte mop2, vbyte op2sz, vbyte *op2) {
-
   if (WWORD != wsz || DIMMED != mop1 || DNONE != mop2)
     return VEINST;
 
