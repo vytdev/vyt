@@ -12,6 +12,12 @@
 #include "inst/ret.h"
 #include "inst/push.h"
 #include "inst/pop.h"
+#include "inst/and.h"
+#include "inst/or.h"
+#include "inst/xor.h"
+#include "inst/not.h"
+#include "inst/shl.h"
+#include "inst/shr.h"
 
 // a data structure for passing parameters into threads
 struct __vyt_thrdarg {
@@ -432,6 +438,12 @@ int v__execunit(void *arg) {
       ICALL(0x0005, ret);
       ICALL(0x0006, push);
       ICALL(0x0007, pop);
+      ICALL(0x0008, and);
+      ICALL(0x0009, or);
+      ICALL(0x000a, xor);
+      ICALL(0x000b, not);
+      ICALL(0x000c, shl);
+      ICALL(0x000d, shr);
 
 #undef ICALL
       default: stat = VEINST;

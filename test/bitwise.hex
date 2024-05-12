@@ -1,0 +1,40 @@
+# bitwise operations test
+
+00 56 59 54                         # magic number
+01                                  # abi version
+01 00 00 00 00 00 00 00             # entry point
+
+# load table
+
+01                                  # load type, from payload
+05                                  # READ and EXEC permission
+28 00 00 00 00 00 00 00             # file offset
+01 00 00 00 00 00 00 00             # memory address
+2c 00 00 00 00 00 00 00             # size
+
+00                                  # end of load table
+
+# lod %r1, 0x88 ; 1000 1000
+02 00 28 01 88
+# lod %r2, 0x6c ; 0110 1100
+02 00 28 02 6c
+# and %r1, %r2  ; 0000 1000
+08 00 4b 01 02
+
+# lod %r2, 0xc3 ; 1100 0011
+02 00 28 02 c3
+# or %r1, %r2   ; 1100 1011
+09 00 4b 01 02
+
+# lod %r2, 0xa5 ; 1010 0101
+02 00 28 02 a5
+# xor %r1, %r2  ; 0110 1110
+0a 00 4b 01 02
+
+# not %r1       ; 1001 0001
+0b 00 0b 01
+
+# sys 0x1
+01 00 05 01 00
+
+# expected: exit code = 145 (0x91)

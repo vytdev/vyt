@@ -86,6 +86,12 @@ typedef struct {
 #define DABSADDR    0x4
 #define DDYNADDR    0x5
 
+/* rfl register flags */
+#define RFL_CF      (1)
+#define RFL_ZF      (1<<1)
+#define RFL_SF      (1<<2)
+#define RFL_OF      (1<<3)
+
 /**
  * initialize the given process context
  */
@@ -172,6 +178,18 @@ static inline int vstpop(vproc *proc, vthrd *thr, vbyte *data, vqword sz) {
   int stat = vmgetd(&proc->mem, data, thr->reg[RSP], sz, VPREAD);
   thr->reg[RSP] += sz;
   return stat;
+}
+
+/* set given flag(s) */
+static inline void vfset(vthrd *thr, vqword flag, char val) {
+  if (val) thr->reg[RFL] |= flag;
+  else     thr->reg[RFL] &= ~flag;
+}
+
+/* return whether a flag is set */
+static inline int vfget(vthrd *thr, vqword flag) {
+  if (thr->reg[RFL] & flag) return 1;
+  return 0;
 }
 
 #endif // _VYT_EXEC_H
