@@ -8,6 +8,8 @@
 #include "inst/sys.h"
 #include "inst/lod.h"
 #include "inst/mov.h"
+#include "inst/call.h"
+#include "inst/ret.h"
 
 // a data structure for passing parameters into threads
 struct __vyt_thrdarg {
@@ -17,7 +19,7 @@ struct __vyt_thrdarg {
 
 // TODO: make this more customizable
 
-int vpinit(vproc *proc) {
+int vpinit(vproc *proc, struct vopts *opt) {
   if (NULL == proc) return VERROR;
   int stat = VOK;
 
@@ -49,6 +51,8 @@ int vpinit(vproc *proc) {
     return VENOMEM;
   }
 
+  proc->opts = opt;
+
   // set some variables
   atomic_store(&proc->nexec, 0);
   atomic_store(&proc->exitcode, 0);
@@ -69,6 +73,8 @@ int vpdestroy(vproc *proc) {
   // check the proc ctx state
   int state = atomic_load(&proc->state);
   if (VSDONE != state && VSCRASH != state) return VERROR;
+
+  proc->opts = NULL;
 
   // destroy the page table
   vmdestroy(&proc->mem);
@@ -266,6 +272,8 @@ int vrun(vproc *proc) {
   // the vm should be already loaded
   if (atomic_load(&proc->state) != VSLOAD) return VERROR;
 
+  int stat = VOK;
+
   // setup 'arg', passed to main's execution unit
   struct __vyt_thrdarg *arg = (struct __vyt_thrdarg*)malloc(
     sizeof(struct __vyt_thrdarg));
@@ -275,7 +283,21 @@ int vrun(vproc *proc) {
   arg->proc = proc;
   proc->thrd[0]->flags = VTALIVE;
 
-  // TODO: setup main's stack and args
+  // setup main's stack
+  proc->thrd[0]->reg[RSP] = MAIN_STACK_START;
+  proc->thrd[0]->reg[RBP] = MAIN_STACK_START;
+
+  // map the stack memory
+  for (vqword loc = MAIN_STACK_START - 1,
+       to = (MAIN_STACK_START - proc->opts->stacksz);
+       loc >= to;
+       loc -= VPAGESZ)
+  {
+    stat = vmmap(&proc->mem, loc >> 14, VPREAD | VPWRITE);
+    if (VOK != stat) return stat;
+  }
+
+  // TODO: setup args
 
   // increment number of active threads and set the vm state to active
   proc->_thrd_used++;
@@ -331,6 +353,7 @@ int v__handle_crash(vproc *proc) {
   fprintf(stderr, "     rbp %016llx %lld\n", thr->reg[RBP], thr->reg[RBP]);
   fprintf(stderr, "     rip %016llx %lld\n", thr->reg[RIP], thr->reg[RIP]);
   fprintf(stderr, "     rfl %016llx %lld\n", thr->reg[RFL], thr->reg[RFL]);
+  fprintf(stderr, "\n");
 
   // free the crashed thread ctx
   free(thr);
@@ -395,9 +418,18 @@ int v__execunit(void *arg) {
 
     // switch though opcodes
     switch (opcode) {
-      case 0x0001: stat = VINST_sys(proc, thr, wsz, mop1, op1sz, op1, mop2, op2sz, op2); break;
-      case 0x0002: stat = VINST_lod(proc, thr, wsz, mop1, op1sz, op1, mop2, op2sz, op2); break;
-      case 0x0003: stat = VINST_mov(proc, thr, wsz, mop1, op1sz, op1, mop2, op2sz, op2); break;
+#define ICALL(opcode, mnemonic)                             \
+  case opcode: stat = VINST_##mnemonic(                     \
+    proc, thr, wsz, mop1, op1sz, op1, mop2, op2sz, op2      \
+  ); break
+
+      ICALL(0x0001, sys);
+      ICALL(0x0002, lod);
+      ICALL(0x0003, mov);
+      ICALL(0x0004, call);
+      ICALL(0x0005, ret);
+
+#undef ICALL
       default: stat = VEINST;
     }
 

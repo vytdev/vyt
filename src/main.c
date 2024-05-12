@@ -245,11 +245,16 @@ int main(int argc, char **argv) {
     fclose(src);
   }
 
+  // our startup options
+  struct vopts opt = {
+    .stacksz = arg_stack,
+  };
+
   vproc p;
   int stat = 0;
 
   // initialize the vm
-  stat = vpinit(&p);
+  stat = vpinit(&p, &opt);
   if (VOK != stat) {
     fprintf(stderr, "%s: failed to initialize vm: ", argv[0]);
     vperr(stat);
@@ -282,6 +287,12 @@ int main(int argc, char **argv) {
 
   // execute the program
   stat = vrun(&p); // name, &argv[i], argc - i);
+  if (VOK != stat) {
+    fprintf(stderr, "%s: aborting due to critical error: ", argv[0]);
+    vperr(stat);
+    vpdestroy(&p);
+    return stat;
+  }
 
   // free resources
   int extc = atomic_load(&p.exitcode);

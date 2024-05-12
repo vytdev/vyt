@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # check args
 if [ "$#" -lt 2 ] ; then
@@ -28,3 +28,4 @@ while IFS= read -r line ; do
 done < "$1" > "$2"
 
 echo "compiled binary: $2"
+

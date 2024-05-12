@@ -7,6 +7,13 @@
 #include "locks.h"
 #include "utils.h"
 
+/* constants */
+#define MAIN_STACK_START ((vqword)1<<63)
+
+struct vopts {
+  vqword            stacksz;          /* main's stack size */
+};
+
 typedef struct {
   vdword            tid;
   thrd_t            handle;
@@ -15,6 +22,8 @@ typedef struct {
 } vthrd;
 
 typedef struct {
+  struct vopts      *opts;
+
   _Atomic vqword    nexec;
   _Atomic int       state;
   _Atomic int       exitcode;
@@ -80,7 +89,7 @@ typedef struct {
 /**
  * initialize the given process context
  */
-int vpinit(vproc *proc);
+int vpinit(vproc *proc, struct vopts *opt);
 
 /**
  * destroy the given process context
@@ -150,6 +159,19 @@ static inline vqword v__maddr(vbyte opmode, vbyte *op, vthrd *thr) {
     default:
       return 0;
   }
+}
+
+/* push bytes to a thread's stack */
+static inline int vstpush(vproc *proc, vthrd *thr, vbyte *data, vqword sz) {
+  thr->reg[RSP] -= sz;
+  return vmsetd(&proc->mem, data, thr->reg[RSP], sz, VPWRITE);
+}
+
+/* pop bytes from a thread's stack */
+static inline int vstpop(vproc *proc, vthrd *thr, vbyte *data, vqword sz) {
+  int stat = vmgetd(&proc->mem, data, thr->reg[RSP], sz, VPREAD);
+  thr->reg[RSP] += sz;
+  return stat;
 }
 
 #endif // _VYT_EXEC_H
