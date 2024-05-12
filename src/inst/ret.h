@@ -1,6 +1,5 @@
 #ifndef _VYT_INST_RET_H
 #define _VYT_INST_RET_H
-#include <string.h>
 #include "../vyt.h"
 #include "../exec.h"
 #include "../utils.h"

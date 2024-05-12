@@ -10,6 +10,8 @@
 #include "inst/mov.h"
 #include "inst/call.h"
 #include "inst/ret.h"
+#include "inst/push.h"
+#include "inst/pop.h"
 
 // a data structure for passing parameters into threads
 struct __vyt_thrdarg {
@@ -428,6 +430,8 @@ int v__execunit(void *arg) {
       ICALL(0x0003, mov);
       ICALL(0x0004, call);
       ICALL(0x0005, ret);
+      ICALL(0x0006, push);
+      ICALL(0x0007, pop);
 
 #undef ICALL
       default: stat = VEINST;

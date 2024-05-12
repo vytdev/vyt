@@ -17,7 +17,7 @@ static inline int VINST_lod(vproc *proc, vthrd *thr, vbyte wsz, vbyte mop1, vbyt
 
   // read bytes
   if (DIMMED == mop2)
-    memcpy(buf, op2, v__wsz(wsz));
+    memcpy(buf, op2, op2sz);
   else {
     int stat = vmgetd(&proc->mem, buf, v__maddr(mop2, op2, thr),
                       v__wsz(wsz), VPREAD);

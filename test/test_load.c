@@ -9,8 +9,13 @@ TEST(program_loader) {
   int stat = VOK;
   vproc p;
 
+  // startup options
+  struct vopts opt = {
+    .stacksz = 0,           // no need to allocate stack
+  };
+
   // initialize the process
-  stat = vpinit(&p);
+  stat = vpinit(&p, &opt);
   if (!TEST_ASSERT(VOK == stat, "vpinit failed")) {
     return 0;
   }

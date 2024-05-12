@@ -18,7 +18,7 @@ static inline int VINST_mov(vproc *proc, vthrd *thr, vbyte wsz, vbyte mop1, vbyt
 
   // read data into buffer
   if (DIMMED == mop2) {
-    memcpy(buf, op2, v__wsz(wsz));
+    memcpy(buf, op2, op2sz);
   } else if (DREG == mop2) {
     v__uwq(buf, thr->reg[*op2]);
   } else {
@@ -31,7 +31,7 @@ static inline int VINST_mov(vproc *proc, vthrd *thr, vbyte wsz, vbyte mop1, vbyt
   if (DREG == mop1) {
     thr->reg[*op1] = v__urq(buf);
   } else {
-    int stat = vmsetd(&proc->mem, buf, v__maddr(mop2, op2, thr),
+    int stat = vmsetd(&proc->mem, buf, v__maddr(mop1, op1, thr),
                       v__wsz(wsz), VPWRITE);
     if (VOK != stat) return stat;
   }

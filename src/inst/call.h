@@ -1,13 +1,12 @@
 #ifndef _VYT_INST_CALL_H
 #define _VYT_INST_CALL_H
-#include <string.h>
 #include "../vyt.h"
 #include "../exec.h"
 #include "../utils.h"
 
 static inline int VINST_call(vproc *proc, vthrd *thr, vbyte wsz, vbyte mop1, vbyte op1sz, vbyte *op1, vbyte mop2, vbyte op2sz, vbyte *op2) {
   if (WQWORD != wsz || (DREG != mop1 && DRELADDR != mop1 && DABSADDR != mop1 &&
-      DABSADDR != mop1) || DNONE != mop2)
+      DDYNADDR != mop1) || DNONE != mop2)
     return VEINST;
   int stat = VOK;
 

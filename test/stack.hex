@@ -1,4 +1,4 @@
-# mov instruction
+# stack push and pop test
 
 00 56 59 54                         # magic number
 01                                  # abi version
@@ -10,11 +10,13 @@
 05                                  # READ and EXEC permission
 28 00 00 00 00 00 00 00             # file offset
 01 00 00 00 00 00 00 00             # memory address
-0a 00 00 00 00 00 00 00             # size
+0d 00 00 00 00 00 00 00             # size
 
 00                                  # end of load table
 
-# mov %r1, 1
-03 00 28 01 01
+# push 144
+06 00 04 90
+# pop byte %r1
+07 00 08 01
 # sys 0x1
 01 00 05 01 00

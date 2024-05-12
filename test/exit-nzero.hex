@@ -14,7 +14,7 @@
 
 00                                  # end of load table
 
-# 0x28: lod %r1, 255
+# lod %r1, 255
 02 00 28 01 ff
-# 0x2d: sys 0x1
+# sys 0x1
 01 00 05 01 00

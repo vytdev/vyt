@@ -16,7 +16,7 @@
 
 # call getret
 04 00 0f 05 00 00 00 00 00 00 00
-# 0x2d: sys 0x1
+# sys 0x1
 01 00 05 01 00
 
 # getret:
