@@ -18,6 +18,20 @@
 #include "inst/not.h"
 #include "inst/shl.h"
 #include "inst/shr.h"
+#include "inst/cmp.h"
+#include "inst/jmp.h"
+#include "inst/jeq.h"
+#include "inst/jne.h"
+#include "inst/jlt.h"
+#include "inst/jgt.h"
+#include "inst/jle.h"
+#include "inst/jge.h"
+#include "inst/jat.h"
+#include "inst/jbt.h"
+#include "inst/jae.h"
+#include "inst/jbe.h"
+#include "inst/jfo.h"
+#include "inst/jno.h"
 
 // a data structure for passing parameters into threads
 struct __vyt_thrdarg {
@@ -444,6 +458,20 @@ int v__execunit(void *arg) {
       ICALL(0x000b, not);
       ICALL(0x000c, shl);
       ICALL(0x000d, shr);
+      ICALL(0x000e, cmp);
+      ICALL(0x000f, jmp);
+      ICALL(0x0010, jeq);
+      ICALL(0x0011, jne);
+      ICALL(0x0012, jlt);
+      ICALL(0x0013, jgt);
+      ICALL(0x0014, jle);
+      ICALL(0x0015, jge);
+      ICALL(0x0016, jat);
+      ICALL(0x0017, jbt);
+      ICALL(0x0018, jae);
+      ICALL(0x0019, jbe);
+      ICALL(0x001a, jfo);
+      ICALL(0x001b, jno);
 
 #undef ICALL
       default: stat = VEINST;

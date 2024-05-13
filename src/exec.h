@@ -150,6 +150,17 @@ static inline int v__opsz(vbyte opmode, vbyte wsz) {
   }
 }
 
+/* read a number based wordsize */
+static inline vqword v__rnum(vbyte wsz, vbyte *data) {
+  switch (wsz) {
+    case WBYTE:   return (vqword)v__urb(data);
+    case WWORD:   return (vqword)v__urw(data);
+    case WDWORD:  return (vqword)v__urd(data);
+    case WQWORD:  return v__urq(data);
+    default:      return 0;
+  }
+}
+
 /* resolve memory address */
 static inline vqword v__maddr(vbyte opmode, vbyte *op, vthrd *thr) {
   switch (opmode) {
