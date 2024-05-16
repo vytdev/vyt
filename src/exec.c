@@ -33,6 +33,7 @@
 #include "inst/jfo.h"
 #include "inst/jno.h"
 #include "inst/lea.h"
+#include "inst/sgx.h"
 
 // a data structure for passing parameters into threads
 struct __vyt_thrdarg {
@@ -474,6 +475,7 @@ int v__execunit(void *arg) {
       ICALL(0x001a, jfo);
       ICALL(0x001b, jno);
       ICALL(0x001c, lea);
+      ICALL(0x001d, sgx);
 
 #undef ICALL
       default: stat = VEINST;

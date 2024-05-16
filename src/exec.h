@@ -203,4 +203,19 @@ static inline int vfget(vthrd *thr, vqword flag) {
   return 0;
 }
 
+/* sign extend a number into qword */
+static inline vqword vsignx(vbyte wordsz, vqword val) {
+  switch (wordsz) {
+    case WBYTE:
+      return ((val >> 7  & 1) ? 0xffffffffffffff00 : 0) | (val & 0xff);
+    case WWORD:
+      return ((val >> 15 & 1) ? 0xffffffffffff0000 : 0) | (val & 0xffff);
+    case WDWORD:
+      return ((val >> 31 & 1) ? 0xffffffff00000000 : 0) | (val & 0xffffffff);
+    case WQWORD:
+      return val;
+  }
+  return val;
+}
+
 #endif // _VYT_EXEC_H

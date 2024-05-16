@@ -1,0 +1,24 @@
+# sgx instruction
+
+00 56 59 54                         # magic number
+01                                  # abi version
+01 00 00 00 00 00 00 00             # entry point
+
+# load table
+
+01                                  # load type, from payload
+05                                  # READ and EXEC permission
+28 00 00 00 00 00 00 00             # file offset
+01 00 00 00 00 00 00 00             # memory address
+0e 00 00 00 00 00 00 00             # size
+
+00                                  # end of load table
+
+# mov %r1, -128
+03 00 28 01 80
+# sgx?b %r1
+1d 00 08 01
+# sys 0x1
+01 00 05 01 00
+
+# expected: sign extended! %r1 = ff ff ff ff ff ff ff 80
