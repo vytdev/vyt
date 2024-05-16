@@ -34,6 +34,10 @@
 #include "inst/jno.h"
 #include "inst/lea.h"
 #include "inst/sgx.h"
+#include "inst/add.h"
+#include "inst/sub.h"
+#include "inst/mul.h"
+#include "inst/div.h"
 
 // a data structure for passing parameters into threads
 struct __vyt_thrdarg {
@@ -476,6 +480,10 @@ int v__execunit(void *arg) {
       ICALL(0x001b, jno);
       ICALL(0x001c, lea);
       ICALL(0x001d, sgx);
+      ICALL(0x001e, add);
+      ICALL(0x001f, sub);
+      ICALL(0x0020, mul);
+      ICALL(0x0021, div);
 
 #undef ICALL
       default: stat = VEINST;

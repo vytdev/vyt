@@ -1,4 +1,4 @@
-#include <stdlib.h>
+#include <stdio.h>
 #include "vyt.h"
 
 int vperr(int ret) {
