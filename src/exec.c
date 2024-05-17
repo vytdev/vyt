@@ -39,6 +39,9 @@
 #include "inst/mul.h"
 #include "inst/div.h"
 #include "inst/mod.h"
+#include "inst/imul.h"
+#include "inst/idiv.h"
+#include "inst/imod.h"
 
 // a data structure for passing parameters into threads
 struct __vyt_thrdarg {
@@ -486,6 +489,9 @@ int v__execunit(void *arg) {
       ICALL(0x0020, mul);
       ICALL(0x0021, div);
       ICALL(0x0022, mod);
+      ICALL(0x0023, imul);
+      ICALL(0x0024, idiv);
+      ICALL(0x0025, imod);
 
 #undef ICALL
       default: stat = VEINST;
